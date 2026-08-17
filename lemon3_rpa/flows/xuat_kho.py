@@ -10,6 +10,9 @@ from .. import lemon3
 from .. import verify
 from ..scenario import Scenario
 
+# Chan tren khi tu dem dong kho, tranh go lac xuong cuoi luoi.
+_MAX_DESCRIPTION_ROWS = 6
+
 
 @dataclass
 class FlowResult:
@@ -101,6 +104,8 @@ def run_voucher(
     log(f"Kho {scenario.warehouse_code} da duoc chon san")
     lemon3.focus(win)
     time.sleep(0.25)
+    # Dem kho ngay tai day: dong ra khoi man Chon kho la mat thong tin nay.
+    description_rows = _count_ticked_warehouses(win, log)
     log(f"Tiep tuc ({scenario.key_continue})")
     lemon3.send_keys(win, scenario.key_continue)
     time.sleep(delay)
@@ -122,7 +127,14 @@ def run_voucher(
     log(f"Toi o Dien giai ({scenario.key_goto_description})")
     lemon3.send_keys(pxk, scenario.key_goto_description)
     time.sleep(0.2)
-    desc_error = _fill_description(pxk, voucher, row, scenario.description_lines, log)
+    desc_error = _fill_description(
+        pxk,
+        voucher,
+        row,
+        scenario.description_lines,
+        scenario.description_rows or description_rows,
+        log,
+    )
     if desc_error:
         shot = _shot(screenshot_dir, f"diengiai-{voucher}")
         return FlowResult("FAILED", desc_error, shot)
@@ -390,31 +402,103 @@ def _close_leftover_forms(scenario: Scenario, log: Callable[[str], None]) -> Non
         time.sleep(0.6)
 
 
+def _count_ticked_warehouses(win: Any, log: Callable[[str], None]) -> int:
+    """Man Chon kho D05F3104 tick san cac kho se xuat va day chung len dau danh
+    sach. So kho duoc tick chinh la so dong Dien giai tren D05F3105."""
+    if not lemon3.ensure_foreground(win, 2.0):
+        log("Man Chon kho bi che, khong dem duoc so kho")
+        return 0
+    left, top, width, height = lemon3.window_rect(win)
+    image = lemon3.grab_region(left, top, width, height)
+    if lemon3.image_is_blank(image):
+        log("Anh man Chon kho chi mot mau, khong dem duoc so kho")
+        return 0
+    codes = _ticked_warehouse_codes(image)
+    if not codes:
+        log("Khong doc duoc kho nao duoc tick, se dien 1 dong dien giai")
+        return 0
+    log(f"Kho duoc xuat: {', '.join(codes)} -> {len(codes)} dong dien giai")
+    return len(codes)
+
+
+def _ticked_warehouse_codes(image: Any) -> list[str]:
+    width, height = image.size
+    # Chi OCR dai hep chua cot Ma kho cho nhanh; o tick doc bang mau, khong can OCR.
+    strip = image.crop((0, 0, int(width * 0.20), height))
+    codes: list[str] = []
+    for text, _x0, y0, _x1, y1 in verify.ocr_boxes(strip):
+        # Ma kho la day 3-6 chu so mo dau o. OCR co luc gop ca ten kho vao cung
+        # mot o nen chi doi khop phan dau.
+        match = re.match(r"(\d{3,6})\b", text.strip())
+        if not match:
+            continue
+        if _row_is_ticked(image, y0, y1, width):
+            codes.append(match.group(1))
+    return codes
+
+
+def _row_is_ticked(image: Any, top: int, bottom: int, width: int) -> bool:
+    """Cot 'Chon kho' o ria phai: o da tick to xanh dac, o chua tick de trang."""
+    band = image.crop(
+        (int(width * 0.80), max(top - 4, 0), width, bottom + 4)
+    ).convert("RGB")
+    blue = 0
+    for red, green, blue_ch in band.getdata():
+        if blue_ch > 120 and blue_ch - red > 60 and blue_ch - green > 30:
+            blue += 1
+            if blue >= 20:
+                return True
+    return False
+
+
 def _fill_description(
     win: Any,
     voucher: str,
     row: dict[str, Any],
     lines: list[dict[str, Any]],
+    row_count: int,
     log: Callable[[str], None],
 ) -> str:
+    """Luoi kho co 1-3 dong, moi dong mot o Dien giai rieng. Phai dien het cac
+    dong roi flow moi bam Luu, khong gop thanh mot o nhieu dong."""
     values: list[str] = []
     for item in lines:
         template = str(item.get("template") or "")
-        required = bool(item.get("required"))
         text = _render(template, voucher, row)
-        if not text and required:
+        if not text and bool(item.get("required")):
             return f"Thieu dien giai bat buoc: {template}"
-        if text:
-            values.append(text)
-    if not values:
+        values.append(text)
+    # Dong nao khong co mau rieng thi dung chung dien giai cua dong dau (so phieu).
+    default_text = next((value for value in values if value), "")
+    if not default_text:
         return ""
-    payload = "\r\n".join(values)
-    # Da o o Dien giai nho phim tat — go thang, khong click chuot theo nhan.
+
+    rows = max(1, min(row_count or 1, _MAX_DESCRIPTION_ROWS))
     lemon3.focus(win)
-    lemon3.send_keys(win, "^a")
-    lemon3.type_text(win, payload)
-    log(f"Dien giai: {payload.replace(chr(13), ' / ')}")
+    for index in range(rows):
+        text = values[index] if index < len(values) and values[index] else default_text
+        error = _type_description_cell(win, text)
+        if error:
+            return f"Dien giai dong {index + 1}: {error}"
+        log(f"Dien giai dong {index + 1}: {text}")
+        if index + 1 < rows:
+            lemon3.send_keys(win, "{DOWN}")
+            time.sleep(0.15)
+    log(f"Da dien {rows} dong dien giai")
     return ""
+
+
+def _type_description_cell(win: Any, text: str) -> str:
+    """Go xong doc lai: Ctrl+A khong an thi noi dung cu con nam trong o."""
+    typed = ""
+    for _attempt in range(2):
+        lemon3.send_keys(win, "^a")
+        lemon3.type_text(win, text)
+        time.sleep(0.12)
+        typed = lemon3.focused_text(win).strip()
+        if not typed or lemon3._fold(typed) == lemon3._fold(text):
+            return ""
+    return f"o dang la '{typed}', can '{text}'"
 
 
 def _render(template: str, voucher: str, row: dict[str, Any]) -> str:

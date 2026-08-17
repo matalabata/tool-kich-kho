@@ -33,6 +33,9 @@ erp:
     ok: '{ENTER}'
     'yes': '%y'
   description:
+    # 0 = tu dem so dong kho tren luoi. Dat 2 hoac 3 neu tool chi dien duoc 1 dong.
+    rows: 0
+    # Moi muc la mot dong kho. Dong khong co gia tri se dung lai dong dau (so phieu).
     lines:
     - template: '{so_phieu}'
       required: true

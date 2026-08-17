@@ -106,6 +106,35 @@ def ocr_image(image: Image.Image) -> str:
     return ""
 
 
+def ocr_boxes(image: Image.Image) -> list[tuple[str, int, int, int, int]]:
+    """(text, left, top, right, bottom) theo toa do trong anh.
+
+    Tra rong neu khong co RapidOCR: pytesseract o day chi tra chu, khong tra vi tri.
+    """
+    engine = _ocr_engine()
+    if engine is None:
+        return []
+    try:
+        import numpy as np
+
+        result, _ = engine(np.asarray(image.convert("RGB")))
+    except Exception:
+        return []
+    boxes: list[tuple[str, int, int, int, int]] = []
+    for row in result or []:
+        if len(row) < 2:
+            continue
+        try:
+            xs = [int(point[0]) for point in row[0]]
+            ys = [int(point[1]) for point in row[0]]
+        except (TypeError, ValueError, IndexError):
+            continue
+        if not xs or not ys:
+            continue
+        boxes.append((str(row[1]), min(xs), min(ys), max(xs), max(ys)))
+    return boxes
+
+
 def _ocr_variants(image: Image.Image) -> list[Image.Image]:
     from PIL import ImageOps
 

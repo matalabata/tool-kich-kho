@@ -13,6 +13,10 @@ from .scenario import Scenario, Step
 
 TEMPLATE_RE = re.compile(r"\{\{\s*([^}]+?)\s*\}\}")
 
+# Nhieu phieu lien tiep NOT_FOUND thuong la DIGINET dang o man hinh khac, khong
+# phai phieu that khong ton tai. Chay tiep chi lam hong ca danh sach.
+MAX_MISS_STREAK = 5
+
 
 @dataclass
 class RunOptions:
@@ -110,6 +114,7 @@ class Runner:
         skip = {(opt.scenario.skip_if_status or "OK").upper(), "SUCCESS", "SKIPPED"}
         ok = 0
         fail = 0
+        miss_streak = 0
         for index, row in enumerate(rows, start=1):
             try:
                 self._wait_if_paused()
@@ -161,9 +166,11 @@ class Runner:
                 store.checkpoint(voucher=voucher, state=outcome, message=message)
                 if outcome in {"SUCCESS", "FOUND"}:
                     ok += 1
+                    miss_streak = 0
                 else:
                     fail += 1
                     self.log(f"{outcome} {voucher}: {message}")
+                    miss_streak = miss_streak + 1 if outcome == "NOT_FOUND" else 0
                 excel_io.write_run_result(
                     result_path,
                     int(row["_excel_row"]),
@@ -174,6 +181,13 @@ class Runner:
                     shot,
                     erp_ref,
                 )
+                if miss_streak >= MAX_MISS_STREAK:
+                    self.log(
+                        f"{miss_streak} phieu lien tiep khong thay tren luoi. Dung lai de "
+                        "khong chay hong ca danh sach. Kiem tra DIGINET dang mo dung tab "
+                        "'Danh sach hoa don ban hang - D05F9300' va khong co man hinh khac de len."
+                    )
+                    break
             except InterruptedError:
                 self.log("Dung giua chung.")
                 excel_io.write_run_result(

@@ -77,6 +77,8 @@ class Scenario:
     # Nhip cho giua cac buoc xo/chon/xac nhan dropdown Loai nghiep vu.
     operation_ms: int = 300
     description_lines: list[dict[str, Any]] = field(default_factory=list)
+    # 0 = tu dem so dong kho tren luoi. Dat 2/3 khi luoi khong doc duoc noi dung o.
+    description_rows: int = 0
     description_label: str = "Dien giai"
     description_xy: str = ""
     key_row_down: str = "{DOWN}"
@@ -194,6 +196,7 @@ def _load_yaml(path: Path) -> Scenario:
         operation_ms = 300
     description_label = str(desc.get("label") or "Dien giai") if isinstance(desc, dict) else "Dien giai"
     description_xy = str(desc.get("xy") or "") if isinstance(desc, dict) else ""
+    description_rows = _as_int(desc.get("rows"), 0) if isinstance(desc, dict) else 0
     keys = erp.get("keys") or {}
     return Scenario(
         name=str(data.get("name") or path.stem),
@@ -217,6 +220,7 @@ def _load_yaml(path: Path) -> Scenario:
         operation_row=operation_row,
         operation_ms=operation_ms,
         description_lines=description_lines,
+        description_rows=description_rows,
         description_label=description_label,
         description_xy=description_xy,
         key_row_down=str(keys.get("row_down") or "{DOWN}"),
