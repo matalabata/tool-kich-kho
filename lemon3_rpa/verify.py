@@ -27,10 +27,13 @@ def voucher_exact_in(text: str, voucher: str) -> bool:
     if token in tokens:
         return True
     compact = "".join(tokens)
-    if compact == token:
+    if compact == token or (len(token) >= 10 and token in compact):
         return True
-    # OCR thuong ghep So phieu + Ngay phieu thanh mot chuoi.
-    return len(token) >= 10 and token in compact
+    # OCR crop o loc thuong cat mat tien to chu (MNBH0101... -> 0101...).
+    tail = re.sub(r"^[A-Z]+", "", token)
+    if len(tail) >= 10 and tail in tokens:
+        return True
+    return any(len(piece) >= 10 and token.endswith(piece) for piece in tokens)
 
 
 def popup_is_success(message: str) -> bool:
@@ -42,9 +45,9 @@ def first_row_region(win: Any, filter_xy: tuple[int, int] | None = None) -> tupl
     left, top, width, height = lemon3.window_rect(win)
     if filter_xy:
         rel_x, rel_y = filter_xy
-        band_left = left + max(rel_x - 80, 180)
+        band_left = left + max(rel_x - 200, 160)
         band_top = top + rel_y + 18
-        band_w = min(520, width - (band_left - left) - 20)
+        band_w = min(640, width - (band_left - left) - 20)
         # Chi lay dong du lieu; band cao qua se gom dong trong -> RapidOCR tra rong.
         band_h = 32
     else:
@@ -165,7 +168,8 @@ def wait_until_result(
     min_scans: int = 2,
 ) -> FindResult:
     log = on_log or (lambda _m: None)
-    deadline = time.time() + max(timeout_s, 0.2)
+    started = time.time()
+    deadline = started + max(timeout_s, 0.2)
     last_text = ""
     last_image: Image.Image | None = None
     warned_cover = False
@@ -179,7 +183,10 @@ def wait_until_result(
             raise InterruptedError("Da dung")
         # Khong dung window_text_blob: o loc vua go so phieu se lam false FOUND.
         if lemon3.wait_for_grid_text(win, voucher, timeout_s=0.05, stop_flag=stop_flag):
-            log(f"FOUND qua control luoi (khong tinh o loc): {voucher}")
+            log(
+                f"FOUND qua control luoi (khong tinh o loc): {voucher} "
+                f"sau {time.time() - started:.1f}s"
+            )
             return FindResult(True, "control", voucher)
         # Anh chup theo toa do man hinh: cua so khac de len se bi OCR doc nham.
         if not lemon3.ensure_foreground(win, 0.4):
@@ -201,47 +208,46 @@ def wait_until_result(
         last_text = ocr
         if voucher_exact_in(ocr, voucher):
             path = _save_image(last_image, screenshot_dir, f"found-{voucher}")
-            log(f"FOUND qua OCR dong dau: {voucher}")
+            log(f"FOUND qua OCR dong dau: {voucher} sau {time.time() - started:.1f}s ({scans} lan quet)")
             return FindResult(True, "ocr", ocr, path)
         time.sleep(poll)
     path = _save_image(last_image, screenshot_dir, f"notfound-{voucher}")
-    log(f"NOT_FOUND {voucher} (vung doc {first_row_region(win, filter_xy)}). Doc duoc: {last_text[:180]}")
+    log(
+        f"NOT_FOUND {voucher} sau {time.time() - started:.1f}s ({scans} lan quet, "
+        f"vung doc {first_row_region(win, filter_xy)}). Doc duoc: {last_text[:180]}"
+    )
     return FindResult(False, "timeout", last_text, path)
 
 
-def focus_looks_like_filter(parent_win: Any) -> tuple[bool, str]:
-    import ctypes
-    from ctypes import wintypes
-
-    user32 = ctypes.windll.user32
-
-    class GUITHREADINFO(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", wintypes.DWORD),
-            ("flags", wintypes.DWORD),
-            ("hwndActive", wintypes.HWND),
-            ("hwndFocus", wintypes.HWND),
-            ("hwndCapture", wintypes.HWND),
-            ("hwndMenuOwner", wintypes.HWND),
-            ("hwndMoveSize", wintypes.HWND),
-            ("hwndCaret", wintypes.HWND),
-            ("rcCaret", wintypes.RECT),
-        ]
-
-    pid = wintypes.DWORD()
-    tid = user32.GetWindowThreadProcessId(int(parent_win.handle), ctypes.byref(pid))
-    info = GUITHREADINFO()
-    info.cbSize = ctypes.sizeof(GUITHREADINFO)
-    if not user32.GetGUIThreadInfo(tid, ctypes.byref(info)):
-        return False, "khong doc duoc focus"
-    hwnd = int(info.hwndFocus or 0)
+def focus_looks_like_filter(
+    parent_win: Any, expect_xy: tuple[int, int] | None = None
+) -> tuple[bool, str]:
+    """O nhap cua luoi la MOT control EDIT duoc di chuyen den o dang sua. Chi xet
+    class thi o du lieu dang sua cung dat -> go so phieu vao du lieu, luoi khong loc.
+    Co expect_xy thi doi hoi control dang phu dung o loc."""
+    hwnd = lemon3.focused_hwnd(parent_win)
     if not hwnd:
         return False, "khong co control focus"
     cls = lemon3._class_name(hwnd)
     title = lemon3._window_text(hwnd)
     low = cls.lower()
     ok = any(token in low for token in ("edit", "tedit", "tmask", "textbox", "combo"))
-    return ok, f"{cls} | {title}"
+    if not ok or expect_xy is None:
+        return ok, f"{cls} | {title}"
+
+    parent_left, parent_top, _w, _h = lemon3.window_rect(parent_win)
+    want_x = parent_left + expect_xy[0]
+    want_y = parent_top + expect_xy[1]
+    left, top, right, bottom = lemon3._window_rect_hwnd(hwnd)
+    pad = 8
+    inside = (left - pad) <= want_x <= (right + pad) and (top - pad) <= want_y <= (bottom + pad)
+    if inside:
+        return True, f"{cls} | {title}"
+    return False, (
+        f"{cls} dang o ({left - parent_left},{top - parent_top})-"
+        f"({right - parent_left},{bottom - parent_top}), khong phai o loc "
+        f"({expect_xy[0]},{expect_xy[1]})"
+    )
 
 
 def _save_image(image: Image.Image | None, folder: Path | None, name: str) -> Path | None:

@@ -188,6 +188,12 @@ class Runner:
                         "'Danh sach hoa don ban hang - D05F9300' va khong co man hinh khac de len."
                     )
                     break
+                if "D05F3104 van mo" in message:
+                    self.log(
+                        "Man Chon kho D05F3104 dang de len luoi. Dung ca luot chay. "
+                        "Bam Dong tren man Chon kho roi chay lai tu phieu bi fail."
+                    )
+                    break
             except InterruptedError:
                 self.log("Dung giua chung.")
                 excel_io.write_run_result(

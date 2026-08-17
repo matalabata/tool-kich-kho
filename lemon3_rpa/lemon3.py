@@ -375,6 +375,27 @@ def is_foreground(win: Any) -> bool:
     return int(user32.GetForegroundWindow() or 0) == int(win.handle)
 
 
+def window_responsive(win: Any, timeout_ms: int = 300) -> bool:
+    """WM_NULL co hoi am khong: form dang nap du lieu se khong bom message,
+    phim gui vao luc do bi nuot."""
+    result = ctypes.c_size_t(0)
+    sent = user32.SendMessageTimeoutW(
+        int(win.handle), 0x0000, 0, None, 0x0002, int(timeout_ms), ctypes.byref(result)
+    )
+    return bool(sent)
+
+
+def wait_responsive(win: Any, timeout_s: float = 20.0) -> float:
+    """Cho form ranh tay. Tra ve so giay da cho."""
+    started = time.time()
+    deadline = started + max(timeout_s, 0.0)
+    while time.time() < deadline:
+        if window_responsive(win):
+            return time.time() - started
+        time.sleep(0.2)
+    return time.time() - started
+
+
 def ensure_foreground(win: Any, timeout_s: float = 3.0) -> bool:
     """Anh chup la anh man hinh: cua so khac de len DIGINET se lam OCR doc nham."""
     deadline = time.time() + timeout_s
@@ -463,22 +484,21 @@ def focused_text(win: Any) -> str:
     return control_text(focused_hwnd(win))
 
 
-def paste_text(win: Any, text: str) -> None:
-    """Dan mot lan qua clipboard: go tung ky tu de bi DIGINET nuot khi dang loc."""
-    try:
-        _set_clipboard(str(text))
-    except Exception:
-        type_text(win, text)
-        return
-    send_keys(win, "^v")
-
-
 def type_text(win: Any, text: str) -> None:
     if any(ord(ch) > 127 for ch in str(text)):
         _set_clipboard(str(text))
         send_keys(win, "^v")
         return
     send_keys(win, escape_keys(str(text)))
+
+
+def type_into_focus(text: str, pause: float = 0.08) -> None:
+    """Go vao control dang focus. Khong ep foreground — focus(win) se mat o loc luoi."""
+    if any(ord(ch) > 127 for ch in str(text)):
+        _set_clipboard(str(text))
+        foreground_keys("^v", pause=0.03)
+        return
+    foreground_keys(escape_keys(str(text)), pause=max(pause, 0.04), with_spaces=True)
 
 
 def _set_clipboard(text: str) -> None:
@@ -652,7 +672,7 @@ def type_in_field(win: Any, label: str, text: str) -> None:
 
 
 def click_button(title: str, win: Any | None = None, timeout_s: float = 6) -> None:
-    needle = title.strip().lower()
+    needle = title.strip().lower().replace("&", "")
     deadline = time.time() + timeout_s
     last_err = "khong thay nut"
     while time.time() < deadline:
@@ -663,10 +683,24 @@ def click_button(title: str, win: Any | None = None, timeout_s: float = 6) -> No
             for info in list_windows("win32"):
                 targets.append(info.handle)
         for hwnd in targets:
-            rect = _find_button_rect(hwnd, needle)
-            if rect is None:
+            child = _find_button_hwnd(hwnd, needle)
+            if not child:
                 continue
-            left, top, right, bottom = rect
+            # BM_CLICK qua SendMessageTimeout: khong can man hinh sang, khong treo
+            # neu DIGINET dang ban. pyautogui.click chi dung khi BM_CLICK khong di.
+            result = ctypes.c_size_t(0)
+            sent = user32.SendMessageTimeoutW(
+                child,
+                0x00F5,
+                0,
+                None,
+                0x0002,
+                800,
+                ctypes.byref(result),
+            )
+            if sent:
+                return
+            left, top, right, bottom = _window_rect_hwnd(child)
             try:
                 pyautogui.click((left + right) // 2, (top + bottom) // 2)
                 return
@@ -684,9 +718,11 @@ def describe_controls(_win: Any, limit: int = 80) -> list[str]:
     return ["Khong quet control tree de tranh treo ERP."]
 
 
-def _find_button_rect(hwnd: int, needle: str) -> tuple[int, int, int, int] | None:
-    hit: tuple[int, int, int, int] | None = None
-    exact: tuple[int, int, int, int] | None = None
+def _find_button_hwnd(hwnd: int, needle: str) -> int:
+    hit = 0
+    needle = (needle or "").lower().replace("&", "")
+    if not needle:
+        return 0
     for child in _walk_controls(hwnd, max_depth=3):
         title = _window_text(child)
         if not title:
@@ -694,12 +730,18 @@ def _find_button_rect(hwnd: int, needle: str) -> tuple[int, int, int, int] | Non
         low = title.lower().replace("&", "")
         if _looks_like_grid(child):
             continue
-        rect = _window_rect_hwnd(child)
         if low == needle or low.rstrip(".") == needle:
-            return rect
-        if needle in low and hit is None and len(low) <= len(needle) + 10:
-            hit = rect
-    return exact or hit
+            return int(child)
+        if needle in low and hit == 0 and len(low) <= len(needle) + 10:
+            hit = int(child)
+    return hit
+
+
+def _find_button_rect(hwnd: int, needle: str) -> tuple[int, int, int, int] | None:
+    child = _find_button_hwnd(hwnd, needle)
+    if not child:
+        return None
+    return _window_rect_hwnd(child)
 
 
 def _looks_like_grid(hwnd: int) -> bool:

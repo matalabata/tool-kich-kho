@@ -68,6 +68,8 @@ class Scenario:
     # Phim nong dung bot khi chuot dang bi bot gianh.
     stop_hotkey: str = "ctrl+shift+q"
     after_type_ms: int = 500
+    # Cho toi da bao lau cho luoi loc xong. Thay phieu la di tiep ngay.
+    filter_timeout_ms: int = 1000
     warehouse_code: str = "1000"
     warehouse_name: str = "Kho tổng JPT - Miền Nam"
     warehouse_xy: str = ""
@@ -81,6 +83,8 @@ class Scenario:
     description_rows: int = 0
     description_label: str = "Dien giai"
     description_xy: str = ""
+    # Rong = go xong de luoi tu loc. Dat '{ENTER}' hoac '{F5}' neu luoi doi phim.
+    key_apply_filter: str = ""
     key_row_down: str = "{DOWN}"
     key_open_dropdown: str = "%{DOWN}"
     key_continue: str = "%t"
@@ -212,6 +216,7 @@ def _load_yaml(path: Path) -> Scenario:
         so_phieu_base=str(app.get("so_phieu_base") or ""),
         stop_hotkey=str(app.get("stop_hotkey") or "ctrl+shift+q"),
         after_type_ms=_as_int(app.get("after_type_ms"), 500),
+        filter_timeout_ms=_as_int(app.get("filter_timeout_ms"), 1000),
         warehouse_code=str(warehouse_code or "1000"),
         warehouse_name=warehouse_name or "Kho tổng JPT - Miền Nam",
         warehouse_xy=warehouse_xy,
@@ -223,6 +228,7 @@ def _load_yaml(path: Path) -> Scenario:
         description_rows=description_rows,
         description_label=description_label,
         description_xy=description_xy,
+        key_apply_filter=str(keys.get("apply_filter") or ""),
         key_row_down=str(keys.get("row_down") or "{DOWN}"),
         key_open_dropdown=str(keys.get("dropdown") or "%{DOWN}"),
         key_continue=str(keys.get("continue") or "%t"),
