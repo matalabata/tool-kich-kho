@@ -1,0 +1,52 @@
+LEMON3 RPA — mang sang may co DIGINET
+
+1) Copy ca thu muc lemon3-rpa sang may kia (USB / OneDrive).
+   Khong can copy thu muc .venv (may kia se tao lai).
+
+2) Tren may DIGINET, cai Python 3.12 neu chua co:
+   https://www.python.org/downloads/
+   Khi cai, BAT BUOC tick "Add python.exe to PATH".
+
+   Neu gap loi "uv trampoline failed" / "entity not found":
+   - Xoa thu muc .venv trong lemon3-rpa (neu co)
+   - Chay lai run.bat
+   Khong copy .venv tu may khac.
+
+   Lan dau cai thu vien: de cua so run.bat mo 3-5 phut.
+   Dong "Installing build dependencies" la pip dang build PyAutoGUI, khong phai mat mang.
+   Neu cua so bao "Can internet" roi tat som: chay lai, dung tat giua chung.
+
+3) Mo DIGINET, dang nhap, vao:
+   Ban hang -> Danh sach hoa don ban hang (D05F9300)
+   De nguyen man hinh do len truoc, dung bam F5.
+
+4) Dong file Excel danh sach phieu (neu dang mo). Tool khong ghi de file goc;
+   ket qua nam trong artifacts/runs/<thoi-gian>/.
+
+5) Double-click run.bat trong thu muc lemon3-rpa.
+   Lan dau se cai thu vien, roi mo cua so Lemon3 RPA.
+
+6) Trong app:
+   - File Excel: chon file cot "SỐ PHIẾU"
+   - Kich ban: scenarios\xuat_kho.yaml (mac dinh)
+   - Tieu de cua so: DIGINET Desktop (khong can D05F9300; do la tab ben trong)
+   - Cot so phieu: D  hoac  SỐ PHIẾU
+   - Lan dau: bam "Kiem tra tim phieu" (nhap + xac minh luoi, KHONG Ctrl+K, KHONG Luu)
+   - "Chi in mo ta" chi in buoc ra man hinh, khong bam DIGINET — khong dung de test loc phieu
+   - Lan that: 1 dong phieu trong Excel, bam Chay
+   - Dung khan cap: dua chuot vao goc tren-trai man hinh
+
+Luong tool:
+  Go so phieu -> doi luoi khop dung ma -> Ctrl+K xuat kho
+  -> Chon kho 1000 -> xac minh MNNKXB01 + Dien giai -> Luu
+  -> chi SUCCESS khi popup dung "Dữ liệu đã được lưu thành công."
+
+Neu khong nhap duoc o So phieu:
+  Click vao o loc duoi cot So phieu, hoac bam "Ghi toa do (3s)".
+  Toa do duoc ghi vao ca YAML va giao dien.
+
+Moi lan chay tao thu muc:
+  artifacts/runs/<id>/run.log
+  artifacts/runs/<id>/screenshots/
+  artifacts/runs/<id>/checkpoints.json
+  artifacts/runs/<id>/result.xlsx  (ban sao, khong ghi de Excel goc)

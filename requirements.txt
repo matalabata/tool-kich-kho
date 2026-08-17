@@ -1,0 +1,9 @@
+customtkinter>=5.2.2,<6
+openpyxl>=3.1.5
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+Pillow>=10.4.0
+PyYAML>=6.0.2
+comtypes>=1.4.8
+setuptools>=69.0.0
+wheel>=0.43.0

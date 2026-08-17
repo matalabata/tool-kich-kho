@@ -1,0 +1,42 @@
+name: Xuat kho tu hoa don ban hang
+flow: xuat_kho
+app:
+  title_contains:
+  - DIGINET Desktop
+  - LEMON3-ERP
+  - D00F3000
+  backend: win32
+  delay_ms: 400
+  so_phieu_xy: 436,316
+  so_phieu_base: 1936x1048
+  after_type_ms: 500
+  stop_hotkey: esc
+loop:
+  excel_column: SỐ PHIẾU
+  skip_if_status: OK
+erp:
+  warehouse:
+    code: '1000'
+    name: Kho tổng JPT - Miền Nam
+  operation:
+    code: MNNKXB01
+    row: 4
+    ms: 300
+  keys:
+    row_down: '{DOWN}'
+    dropdown: '%{DOWN}'
+    continue: '%t'
+    description: '{F11}'
+    save: '%l'
+    close: '%n'
+    true: '%y'
+    ok: '{ENTER}'
+    'yes': '%y'
+  description:
+    lines:
+    - template: '{so_phieu}'
+      required: true
+    - template: '{DIEN_GIAI_2}'
+      required: false
+    - template: '{DIEN_GIAI_3}'
+      required: false

@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+logs/
+artifacts/
+*.log
+.idea/
+.vscode/
+config/local.json
